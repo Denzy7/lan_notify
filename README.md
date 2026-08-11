@@ -304,4 +304,4 @@ Check:
 
 ## License
 
-Add your preferred license here.
+zlib
