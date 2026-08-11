@@ -1,11 +1,17 @@
 import socket
 import threading
+import argparse
 
 from shared.protocol import send_json, receive_json
 
+parser = argparse.ArgumentParser(description="LAN Notify server")
 
-HOST = "0.0.0.0"
-PORT = 5000
+parser.add_argument("-p", dest="port", help="port", default=5000, type=int)
+parser.add_argument("-a", dest="address", help="address", default="0.0.0.0", type=str)
+args = parser.parse_args()
+
+HOST = args.address
+PORT = args.port
 
 
 clients = {}
