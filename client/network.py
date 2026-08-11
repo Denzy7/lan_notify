@@ -6,6 +6,11 @@ import time
 from shared.protocol import send_json, receive_json
 
 
+PING_INTERVAL = 5      # seconds between pings
+PONG_TIMEOUT = 15      # seconds without a pong before we consider it dead
+CONNECT_TIMEOUT = 10   # seconds to wait for the initial TCP connect
+
+
 class NetworkClient:
 
     def __init__(self):
@@ -19,31 +24,68 @@ class NetworkClient:
 
         self.receiver = None
         self.heartbeat = None
+        self.connector = None
 
         self.last_pong = 0
 
         self.lock = threading.Lock()
 
-    def connect(self, host, port):
+        # Set the instant disconnect() is called, *before* any socket I/O.
+        # This matters because calling disconnect() sends a message that
+        # can make the server close its end of the socket, which can wake
+        # up receive_loop's own automatic mark_disconnected() call before
+        # disconnect() gets to call it. Reading this flag (rather than
+        # passing voluntary=True as an argument at the call site) means
+        # whichever thread gets there first still reports the correct
+        # reason.
+        self._voluntary_disconnect = False
 
-        self.socket = socket.socket(
+    def connect(self, host, port):
+        """Kick off a connection attempt in the background so the GUI
+        thread never blocks on the socket timeout. Result arrives on
+        `events` as a 'connect_result' message."""
+
+        self.connector = threading.Thread(
+            target=self._connect_worker,
+            args=(host, port),
+            daemon=True
+        )
+
+        self.connector.start()
+
+    def _connect_worker(self, host, port):
+
+        sock = socket.socket(
             socket.AF_INET,
             socket.SOCK_STREAM
         )
 
-        self.socket.settimeout(10)
+        try:
+            sock.settimeout(CONNECT_TIMEOUT)
+            sock.connect((host, port))
+            sock.settimeout(None)
 
-        self.socket.connect(
-            (host, port)
-        )
+        except Exception as ex:
+            try:
+                sock.close()
+            except Exception:
+                pass
 
-        self.socket.settimeout(None)
+            self.events.put(
+                {
+                    "type": "connect_result",
+                    "success": False,
+                    "error": str(ex)
+                }
+            )
+            return
 
-        self.file = self.socket.makefile("r")
-
-        self.connected = True
-
-        self.last_pong = time.monotonic()
+        with self.lock:
+            self.socket = sock
+            self.file = sock.makefile("r")
+            self.connected = True
+            self.last_pong = time.monotonic()
+            self._voluntary_disconnect = False
 
         self.receiver = threading.Thread(
             target=self.receive_loop,
@@ -58,6 +100,13 @@ class NetworkClient:
         )
 
         self.heartbeat.start()
+
+        self.events.put(
+            {
+                "type": "connect_result",
+                "success": True
+            }
+        )
 
     def receive_loop(self):
 
@@ -98,7 +147,7 @@ class NetworkClient:
 
         while self.connected:
 
-            time.sleep(5)
+            time.sleep(PING_INTERVAL)
 
             if not self.connected:
                 break
@@ -116,11 +165,11 @@ class NetworkClient:
                 self.mark_disconnected()
                 break
 
-            # If we haven't received a pong for 15 seconds,
-            # consider the connection lost.
+            # If we haven't received a pong in a while, the connection
+            # is dead even though the OS may not have noticed yet.
             if (
                 time.monotonic() - self.last_pong
-                > 15
+                > PONG_TIMEOUT
             ):
                 self.mark_disconnected()
                 break
@@ -136,7 +185,8 @@ class NetworkClient:
 
         self.events.put(
             {
-                "type": "disconnected"
+                "type": "disconnected",
+                "voluntary": self._voluntary_disconnect
             }
         )
 
@@ -155,15 +205,21 @@ class NetworkClient:
     def set_username(self, username):
 
         if not self.connected:
-            return
+            return False
 
-        send_json(
-            self.socket,
-            {
-                "type": "set_username",
-                "username": username
-            }
-        )
+        try:
+            send_json(
+                self.socket,
+                {
+                    "type": "set_username",
+                    "username": username
+                }
+            )
+            return True
+
+        except Exception:
+            self.mark_disconnected()
+            return False
 
     def send_notification(
         self,
@@ -172,21 +228,31 @@ class NetworkClient:
     ):
 
         if not self.connected:
-            return
+            return False
 
-        send_json(
-            self.socket,
-            {
-                "type": "notify",
-                "target": target,
-                "message": message
-            }
-        )
+        try:
+            send_json(
+                self.socket,
+                {
+                    "type": "notify",
+                    "target": target,
+                    "message": message
+                }
+            )
+            return True
+
+        except Exception:
+            self.mark_disconnected()
+            return False
 
     def disconnect(self):
 
         if not self.connected:
             return
+
+        # Set this *before* touching the socket - see the comment on
+        # the attribute definition for why ordering matters here.
+        self._voluntary_disconnect = True
 
         try:
 

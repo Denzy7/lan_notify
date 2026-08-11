@@ -13,29 +13,32 @@ lock = threading.Lock()
 
 
 def broadcast_user_list():
-    users = []
+    """Send the current user list to everyone. Sockets are sent to
+    *outside* the lock - a slow or stuck client shouldn't be able to
+    freeze every other client's view of who's online."""
 
     with lock:
-        for info in clients.values():
-            if info["username"]:
-                users.append(
-                    {
-                        "username": info["username"],
-                        "ip": info["ip"]
-                    }
-                )
+        users = [
+            {"username": info["username"], "ip": info["ip"]}
+            for info in clients.values()
+            if info["username"]
+        ]
 
-        for info in list(clients.values()):
-            try:
-                send_json(
-                    info["socket"],
-                    {
-                        "type": "user_list",
-                        "users": users
-                    }
-                )
-            except Exception:
-                pass
+        targets = [info["socket"] for info in clients.values()]
+
+    for sock in targets:
+        try:
+            send_json(
+                sock,
+                {
+                    "type": "user_list",
+                    "users": users
+                }
+            )
+        except Exception:
+            # If the send fails the client's own receive loop will
+            # notice the drop and clean it up; nothing to do here.
+            pass
 
 
 def remove_client(sock):
@@ -47,7 +50,7 @@ def remove_client(sock):
 
     try:
         sock.close()
-    except:
+    except Exception:
         pass
 
 
@@ -63,7 +66,11 @@ def handle_client(sock, address):
             "ip": address[0]
         }
 
-    send_json(sock, {"type": "connected"})
+    try:
+        send_json(sock, {"type": "connected"})
+    except Exception:
+        remove_client(sock)
+        return
 
     try:
         while True:
@@ -77,47 +84,56 @@ def handle_client(sock, address):
 
             if msg_type == "set_username":
 
-                with lock:
-                    clients[sock]["username"] = message["username"]
+                username = message.get("username")
 
-                print(f"User set name: {message['username']}")
+                if not username:
+                    continue
+
+                with lock:
+                    clients[sock]["username"] = username
+
+                print(f"User set name: {username}")
 
                 broadcast_user_list()
 
             elif msg_type == "notify":
 
-                target = message["target"]
-                text = message["message"]
-
-                sender = clients[sock]["username"]
+                target = message.get("target")
+                text = message.get("message", "")
 
                 with lock:
+                    sender = clients[sock]["username"]
+                    target_socket = None
 
                     for info in clients.values():
-
                         if info["username"] == target:
-
-                            send_json(
-                                info["socket"],
-                                {
-                                    "type": "notification",
-                                    "from": sender,
-                                    "message": text
-                                }
-                            )
-
+                            target_socket = info["socket"]
                             break
+
+                if target_socket is not None:
+                    try:
+                        send_json(
+                            target_socket,
+                            {
+                                "type": "notification",
+                                "from": sender,
+                                "message": text
+                            }
+                        )
+                    except Exception:
+                        # Target dropped mid-send; its own receive loop
+                        # will detect and clean it up.
+                        pass
 
             elif msg_type == "disconnect":
                 break
+
             elif msg_type == "ping":
 
-                send_json(
-                        sock,
-                        {
-                            "type": "pong"
-                            }
-                        )
+                try:
+                    send_json(sock, {"type": "pong"})
+                except Exception:
+                    break
 
     except Exception as ex:
         print(ex)

@@ -4,6 +4,7 @@ from tkinter import ttk, messagebox
 from client.network import NetworkClient
 from client.notifications import Notifier
 from client.config import load_config, save_config
+from client.theme import apply_theme, status_style_for, MUTED, CARD, SUCCESS, WARNING, DANGER
 
 from client.frames.connect import ConnectFrame
 from client.frames.username import UsernameFrame
@@ -16,7 +17,10 @@ class App(tk.Tk):
         super().__init__()
 
         self.title("LAN Notify")
-        self.geometry("700x500")
+        self.geometry("760x560")
+        self.minsize(620, 460)
+
+        self.fonts = apply_theme(self)
 
         self.network = NetworkClient()
 
@@ -35,11 +39,6 @@ class App(tk.Tk):
         )
 
         container = ttk.Frame(self)
-
-        container.pack(
-            fill="both",
-            expand=True
-        )
 
         self.frames = {}
 
@@ -62,16 +61,43 @@ class App(tk.Tk):
                 sticky="nsew"
             )
 
-        status = ttk.Label(
-            self,
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+
+        # -----------------------------
+        # Status bar
+        # -----------------------------
+
+        status_bar = ttk.Frame(self, style="Card.TFrame")
+        status_bar.pack(side="bottom", fill="x")
+
+        separator = ttk.Frame(status_bar, height=1)
+        separator.pack(side="top", fill="x")
+
+        self.status_dot = tk.Canvas(
+            status_bar,
+            width=10,
+            height=10,
+            bg=CARD,
+            highlightthickness=0
+        )
+        self.status_dot.pack(side="left", padx=(15, 6), pady=8)
+        self._dot_id = self.status_dot.create_oval(1, 1, 9, 9, fill=MUTED, outline="")
+
+        self.status_label = ttk.Label(
+            status_bar,
             textvariable=self.status,
-            anchor="w"
+            style="CardMuted.TLabel"
         )
 
-        status.pack(
-            side="bottom",
-            fill="x"
+        self.status_label.pack(
+            side="left",
+            pady=8
         )
+        container.pack(
+                fill="both",
+                expand=True
+                )
 
         # Give the connection screen the saved values.
         self.frames["ConnectFrame"].host.set(
@@ -83,6 +109,7 @@ class App(tk.Tk):
         )
 
         self.show_frame("ConnectFrame")
+        self.set_status("Disconnected")
 
         self.after(
             50,
@@ -99,6 +126,20 @@ class App(tk.Tk):
 
     def set_status(self, text):
         self.status.set(text)
+        self.status_label.configure(style=status_style_for(text))
+
+        lowered = text.lower()
+
+        if lowered == "connected":
+            dot_color = SUCCESS
+        elif "connecting" in lowered:
+            dot_color = WARNING
+        elif "lost" in lowered or "error" in lowered or "failed" in lowered:
+            dot_color = DANGER
+        else:
+            dot_color = MUTED
+
+        self.status_dot.itemconfig(self._dot_id, fill=dot_color)
 
     def connect(self, host, port):
 
@@ -113,24 +154,12 @@ class App(tk.Tk):
         )
 
         self.set_status("Connecting...")
+        self.frames["ConnectFrame"].set_connecting(True)
 
-        try:
-
-            self.network.connect(
-                self.host,
-                self.port
-            )
-
-        except Exception as ex:
-
-            messagebox.showerror(
-                "Connection Error",
-                str(ex)
-            )
-
-            self.set_status(
-                "Disconnected"
-            )
+        self.network.connect(
+            self.host,
+            self.port
+        )
 
     def set_username(self, username):
 
@@ -143,7 +172,7 @@ class App(tk.Tk):
             self.username
         )
 
-        self.network.set_username(
+        return self.network.set_username(
             username
         )
 
@@ -153,7 +182,7 @@ class App(tk.Tk):
         message
     ):
 
-        self.network.send_notification(
+        return self.network.send_notification(
             target,
             message
         )
@@ -180,7 +209,19 @@ class App(tk.Tk):
 
             msg_type = event.get("type")
 
-            if msg_type == "connected":
+            if msg_type == "connect_result":
+
+                self.frames["ConnectFrame"].set_connecting(False)
+
+                if not event.get("success"):
+                    messagebox.showerror(
+                        "Connection Error",
+                        event.get("error", "Could not connect to the server."),
+                        parent=self
+                    )
+                    self.set_status("Disconnected")
+
+            elif msg_type == "connected":
 
                 self.set_status(
                     "Connected"
@@ -247,14 +288,7 @@ class App(tk.Tk):
 
             elif msg_type == "disconnected":
 
-                was_connected = (
-                    self.status.get()
-                    == "Connected"
-                )
-
-                self.set_status(
-                    "Connection lost"
-                )
+                voluntary = event.get("voluntary", False)
 
                 self.users.clear()
 
@@ -262,7 +296,10 @@ class App(tk.Tk):
                     "ConnectFrame"
                 )
 
-                if was_connected:
+                if voluntary:
+                    self.set_status("Disconnected")
+                else:
+                    self.set_status("Connection lost")
 
                     messagebox.showwarning(
                         "Connection Lost",

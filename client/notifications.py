@@ -1,4 +1,5 @@
 import platform
+import subprocess
 
 
 class Notifier:
@@ -12,6 +13,9 @@ class Notifier:
 
         if system == "Linux":
             return Notifier._linux(title, message)
+
+        if system == "Darwin":
+            return Notifier._macos(title, message)
 
         print(
             f"[Notifications] Unsupported operating system: {system}"
@@ -78,6 +82,34 @@ class Notifier:
         except Exception as ex:
             print(
                 f"[Notifications] Linux notification failed: {ex}"
+            )
+
+            return False
+
+    @staticmethod
+    def _macos(title, message):
+        # Uses the built-in `osascript` so there's no extra dependency
+        # to install on macOS.
+        def escape(text):
+            return text.replace("\\", "\\\\").replace('"', '\\"')
+
+        script = (
+            f'display notification "{escape(message)}" '
+            f'with title "{escape(title)}"'
+        )
+
+        try:
+            subprocess.run(
+                ["osascript", "-e", script],
+                check=True,
+                capture_output=True
+            )
+
+            return True
+
+        except Exception as ex:
+            print(
+                f"[Notifications] macOS notification failed: {ex}"
             )
 
             return False
