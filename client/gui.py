@@ -238,19 +238,37 @@ class App(tk.Tk):
 
                 messagebox.showerror(
                     "Error",
-                    event["message"],
+                    event.get(
+                        "message",
+                        "Unknown error"
+                    ),
                     parent=self
                 )
 
             elif msg_type == "disconnected":
 
-                self.set_status(
-                    "Disconnected"
+                was_connected = (
+                    self.status.get()
+                    == "Connected"
                 )
+
+                self.set_status(
+                    "Connection lost"
+                )
+
+                self.users.clear()
 
                 self.show_frame(
                     "ConnectFrame"
                 )
+
+                if was_connected:
+
+                    messagebox.showwarning(
+                        "Connection Lost",
+                        "The connection to the server was lost.",
+                        parent=self
+                    )
 
         self.after(
             50,
@@ -266,7 +284,9 @@ class App(tk.Tk):
     def bring_to_front(self):
 
         self.deiconify()
+
         self.lift()
+
         self.focus_force()
 
         self.attributes(
@@ -286,6 +306,7 @@ class App(tk.Tk):
 
         try:
             self.network.disconnect()
+
         except Exception:
             pass
 

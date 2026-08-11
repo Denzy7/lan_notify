@@ -110,6 +110,14 @@ def handle_client(sock, address):
 
             elif msg_type == "disconnect":
                 break
+            elif msg_type == "ping":
+
+                send_json(
+                        sock,
+                        {
+                            "type": "pong"
+                            }
+                        )
 
     except Exception as ex:
         print(ex)
