@@ -1,0 +1,106 @@
+name: build and release qt windows and linux frontend
+on:
+  push:
+    branches:
+      - main, ci
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-2019
+            shell: msys2
+            name: "x86_64_windows"
+            pip: .venv\Scripts\pip
+            pyi: .venv\Scripts\pyinstaller
+          - os: ubuntu-22.04
+            shell: bash
+            name: "x86_64_linux"
+            pip: .venv/bin/pip
+            pyi: .venv/bin/pyinstaller
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell}} {0}
+
+    steps:
+      - name: linux setup and dependencies
+        if: matrix.name == 'x86_64_linux'
+        run: |
+          sudo apt update
+          sudo apt -y install python3 python3-venv python3-tk
+
+      - name: msys2 setup
+        uses: msys2/setup-msys2@v2
+        if: matrix.name == 'x86_64_windows'
+        with:
+          msystem: UCRT64
+          update: true
+          pacboy: gcc python python-pip
+          install: git zip
+
+      - name: fix crlf
+        run: git config --global core.autocrlf input
+
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: ${{ matrix.name }} venv
+        run: |
+          python3 -m venv .venv
+          ${{ matrix.pip}} install pyinstaller
+
+      - name: winotify
+        if: matrix.name == 'x86_64_windows'
+        run: |
+          ${{ matrix.pip}} install winotify
+
+      - name: notify2
+        if: matrix.name == 'x86_64_linux'
+        run: |
+          ${{ matrix.pip}} install notify2
+
+      - name: build binary
+        run: |
+          ${{ matrix.pyi }} --onefile run_client.py --name "OfficeTalk"
+
+#      - name: ${{ matrix.name }} zip
+        #run: |
+          #zip -r ${{ matrix.name }}.zip frontend_qt/patientmgr_qt/out-${{ matrix.name }}/
+
+      - name: ${{ matrix.name }} build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}_build
+          path: dist/**
+
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: rel
+
+      - name: release files list
+        run: |
+          ls rel/**
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            rel/**
