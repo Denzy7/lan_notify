@@ -2,6 +2,7 @@ name: build and release qt windows and linux frontend
 on:
   push:
     branches:
+      - main
       - ci
     tags:
       - "v*"
