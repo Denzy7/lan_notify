@@ -16,7 +16,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("LAN Notify")
+        self.title("OfficeTalk")
         self.geometry("760x560")
         self.minsize(620, 460)
 

@@ -62,7 +62,7 @@ class MainFrame(ttk.Frame):
 
         ttk.Label(
             title_box,
-            text="LAN Notify",
+            text="OfficeTalk",
             style="Heading.TLabel"
         ).pack(side="left")
 
