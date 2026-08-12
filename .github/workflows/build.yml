@@ -18,8 +18,8 @@ jobs:
           - os: windows-2022
             shell: msys2
             name: "x86_64_windows"
-            pip: .venv\Scripts\pip
-            pyi: .venv\Scripts\pyinstaller
+            pip: .venv/Scripts/pip
+            pyi: .venv/Scripts/pyinstaller
           - os: ubuntu-22.04
             shell: bash
             name: "x86_64_linux"
