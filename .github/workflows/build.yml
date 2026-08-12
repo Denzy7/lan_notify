@@ -18,8 +18,8 @@ jobs:
           - os: windows-2022
             shell: msys2
             name: "x86_64_windows"
-            pip: .venv/Scripts/pip.exe
-            pyi: .venv/Scripts/pyinstaller.exe
+            pip: .venv/bin/pip.exe
+            pyi: .venv/bin/pyinstaller.exe
           - os: ubuntu-22.04
             shell: bash
             name: "x86_64_linux"
@@ -57,7 +57,6 @@ jobs:
       - name: ${{ matrix.name }} venv
         run: |
           python3 -m venv .venv
-          ls .venv/**
           ${{ matrix.pip}} install pyinstaller
 
       - name: winotify
