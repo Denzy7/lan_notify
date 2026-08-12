@@ -57,6 +57,7 @@ jobs:
       - name: ${{ matrix.name }} venv
         run: |
           python3 -m venv .venv
+          ls .venv/**
           ${{ matrix.pip}} install pyinstaller
 
       - name: winotify
