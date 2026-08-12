@@ -4,7 +4,7 @@ from tkinter import ttk, messagebox
 from client.network import NetworkClient
 from client.notifications import Notifier
 from client.config import load_config, save_config
-from client.theme import apply_theme, status_style_for, MUTED, CARD, SUCCESS, WARNING, DANGER
+from client.theme import apply_theme, status_style_for, MUTED, CARD, SUCCESS, WARNING, DANGER, TEXT, BORDER
 
 from client.frames.connect import ConnectFrame
 from client.frames.username import UsernameFrame
@@ -201,6 +201,70 @@ class App(tk.Tk):
             "Disconnected"
         )
 
+    def show_notification_dialog(self, sender, message):
+        """A small custom dialog (instead of messagebox.showinfo) so the
+        message text is selectable and has an explicit Copy button —
+        plain tk message boxes don't offer that reliably on every OS."""
+
+        dialog = tk.Toplevel(self)
+        dialog.title(f"Notification from {sender}")
+        dialog.configure(bg=CARD)
+        dialog.transient(self)
+        dialog.resizable(False, False)
+
+        wrapper = ttk.Frame(dialog, style="Card.TFrame", padding=20)
+        wrapper.pack(fill="both", expand=True)
+
+        ttk.Label(
+            wrapper,
+            text=f"From {sender}",
+            style="CardHeading.TLabel"
+        ).pack(anchor="w", pady=(0, 10))
+
+        text = tk.Text(
+            wrapper,
+            width=44,
+            height=6,
+            wrap="word",
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=BORDER,
+            bg=CARD,
+            fg=TEXT,
+            font=("Segoe UI", 10)
+        )
+
+        text.insert("1.0", message)
+        text.configure(state="disabled")  # read-only, but still selectable/copyable
+        text.pack(fill="both", expand=True, pady=(0, 14))
+
+        buttons = ttk.Frame(wrapper, style="Card.TFrame")
+        buttons.pack(fill="x")
+
+        def copy_message():
+            self.clipboard_clear()
+            self.clipboard_append(message)
+            copy_button.config(text="Copied!")
+            dialog.after(1200, lambda: copy_button.config(text="Copy"))
+
+        copy_button = ttk.Button(
+            buttons,
+            text="Copy",
+            command=copy_message
+        )
+        copy_button.pack(side="left")
+
+        ttk.Button(
+            buttons,
+            text="OK",
+            style="Accent.TButton",
+            command=dialog.destroy
+        ).pack(side="right")
+
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+        dialog.grab_set()
+        dialog.focus_set()
+
     def process_events(self):
 
         while not self.network.events.empty():
@@ -269,11 +333,7 @@ class App(tk.Tk):
                     message
                 )
 
-                messagebox.showinfo(
-                    f"Notification from {sender}",
-                    message,
-                    parent=self
-                )
+                self.show_notification_dialog(sender, message)
 
             elif msg_type == "error":
 
