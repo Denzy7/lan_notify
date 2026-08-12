@@ -15,8 +15,9 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
+        self.version = "v0.0.1"
 
-        self.title("OfficeTalk")
+        self.title(f"OfficeTalk {self.version}")
         self.geometry("760x560")
         self.minsize(620, 460)
 

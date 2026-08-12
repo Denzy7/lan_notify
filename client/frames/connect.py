@@ -158,7 +158,7 @@ class ConnectFrame(ttk.Frame):
 
         ttk.Label(
             panel,
-            text="OfficeTalk",
+            text=f"OfficeTalk {self.app.version}",
             style="Title.TLabel"
         ).pack(pady=(0, 4))
 

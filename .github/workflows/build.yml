@@ -42,7 +42,7 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          pacboy: gcc python python-pip
+          pacboy: gcc python python-pip python-pillow tk
           install: git zip
 
       - name: fix crlf
@@ -55,7 +55,7 @@ jobs:
 
       - name: ${{ matrix.name }} venv
         run: |
-          python3 -m venv .venv
+          python3 -m venv --system-site-packages .venv
           ${{ matrix.pip}} install pyinstaller pillow
 
       - name: winotify
@@ -70,7 +70,7 @@ jobs:
 
       - name: build binary
         run: |
-          ${{ matrix.pyi }} --onefile run_client.py --name "OfficeTalk"
+          ${{ matrix.pyi }} OfficeTalk.spec
 
 #      - name: ${{ matrix.name }} zip
         #run: |
