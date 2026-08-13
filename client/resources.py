@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 
 
@@ -18,7 +17,13 @@ def resource_path(relative_path: str) -> Path:
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
+    except AttributeError:
+        # Not frozen - resolve relative to the project root (this file's
+        # grandparent directory), not the current working directory.
+        # os.path.abspath(".") would silently break if this app is ever
+        # launched from somewhere other than the project root (a desktop
+        # shortcut with a different "Start in" folder, a different cwd,
+        # etc.) - __file__ is always correct regardless of cwd.
+        base_path = Path(__file__).resolve().parent.parent
 
-    return Path(os.path.join(base_path, relative_path))
+    return Path(base_path) / relative_path

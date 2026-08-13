@@ -1,8 +1,10 @@
 import tkinter as tk
+import webbrowser
 from tkinter import ttk
 
 from client.resources import resource_path
-from client.theme import BG
+from client.theme import BG, ACCENT
+from client.updater import check_for_update
 
 try:
     from PIL import Image, ImageTk
@@ -57,6 +59,38 @@ class ConnectFrame(ttk.Frame):
         )
 
         self.canvas.bind("<Configure>", self._on_canvas_configure)
+
+        self._update_url = None
+        check_for_update(self._on_update_check_result)
+
+    # -----------------------------------------------------------------
+    # Update check
+    # -----------------------------------------------------------------
+
+    def _on_update_check_result(self, latest_tag, html_url):
+        # This callback fires from a background thread (see
+        # client/updater.py) - never touch Tk widgets directly from
+        # there. `after(0, ...)` hands the actual UI update back to the
+        # main thread's event loop.
+        self.after(0, lambda: self._show_update_banner(latest_tag, html_url))
+
+    def _show_update_banner(self, latest_tag, html_url):
+        if latest_tag is None:
+            return  # up to date, or the check failed - nothing to show
+
+        self._update_url = html_url
+
+        self.update_label.config(
+            text=f"\U0001F389 {latest_tag} is available \u2014 click to download",
+            foreground=ACCENT
+        )
+
+        self.update_label.pack(pady=(4, 0))
+        self.update_label.bind("<Button-1>", self._open_update_url)
+
+    def _open_update_url(self, event=None):
+        if self._update_url:
+            webbrowser.open(self._update_url)
 
     # -----------------------------------------------------------------
     # Background image handling
@@ -214,6 +248,15 @@ class ConnectFrame(ttk.Frame):
         )
 
         self.hint.pack(pady=(10, 0))
+
+        # Hidden until check_for_update() finds something - see
+        # _show_update_banner / __init__'s call to check_for_update.
+        self.update_label = ttk.Label(
+            card,
+            text="",
+            style="CardMuted.TLabel",
+            cursor="hand2"
+        )
 
         for entry in form.winfo_children():
             if isinstance(entry, ttk.Entry):

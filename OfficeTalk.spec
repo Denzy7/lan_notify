@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+import os
 
 a = Analysis(
     ['run_client.py'],
@@ -16,13 +16,14 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+custom_name =  os.getenv("PYI_NAME", "OfficeTalk")
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
     a.datas,
     [],
-    name='OfficeTalk',
+    name=custom_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

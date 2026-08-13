@@ -19,11 +19,13 @@ jobs:
             name: "x86_64_windows"
             pip: .venv/bin/pip.exe
             pyi: .venv/bin/pyinstaller.exe
+            pyi_name: "win64"
           - os: ubuntu-22.04
             shell: bash
             name: "x86_64_linux"
             pip: .venv/bin/pip
             pyi: .venv/bin/pyinstaller
+            pyi_name: "linux64"
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -70,7 +72,8 @@ jobs:
 
       - name: build binary
         run: |
-          ${{ matrix.pyi }} OfficeTalk.spec
+          VER=$(python -c 'from client.version import __version__; print(__version__)')
+          PYI_NAME="OfficeTalk-${VER}-${{ matrix.pyi_name }}" ${{ matrix.pyi }} OfficeTalk.spec
 
 #      - name: ${{ matrix.name }} zip
         #run: |

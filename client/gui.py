@@ -1,10 +1,12 @@
 import tkinter as tk
+from datetime import datetime
 from tkinter import ttk, messagebox
 
 from client.network import NetworkClient
 from client.notifications import Notifier
 from client.config import load_config, save_config
 from client.theme import apply_theme, status_style_for, MUTED, CARD, SUCCESS, WARNING, DANGER, TEXT, BORDER
+from client.version import __version__
 
 from client.frames.connect import ConnectFrame
 from client.frames.username import UsernameFrame
@@ -15,7 +17,7 @@ class App(tk.Tk):
 
     def __init__(self):
         super().__init__()
-        self.version = "v0.0.1"
+        self.version = __version__
 
         self.title(f"OfficeTalk {self.version}")
         self.geometry("760x560")
