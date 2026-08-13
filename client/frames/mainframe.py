@@ -11,7 +11,7 @@ class MainFrame(ttk.Frame):
 
         self.app = app
 
-        self.selected_user = None
+        self.selected_users = []
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -89,11 +89,21 @@ class MainFrame(ttk.Frame):
         users_card.grid(row=1, column=0, sticky="ew", pady=(0, 16))
         users_card.columnconfigure(0, weight=1)
 
+        users_header = ttk.Frame(users_card, style="Card.TFrame")
+        users_header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        users_header.columnconfigure(0, weight=1)
+
         ttk.Label(
-            users_card,
+            users_header,
             text="Connected Users",
             style="CardHeading.TLabel"
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        ).grid(row=0, column=0, sticky="w")
+
+        ttk.Label(
+            users_header,
+            text="Ctrl+click to select multiple \u00b7 Shift+click for a range",
+            style="CardMuted.TLabel"
+        ).grid(row=0, column=1, sticky="e")
 
         tree_frame = ttk.Frame(users_card, style="Card.TFrame")
         tree_frame.grid(row=1, column=0, sticky="nsew")
@@ -103,7 +113,10 @@ class MainFrame(ttk.Frame):
             tree_frame,
             columns=("username", "ip"),
             show="headings",
-            selectmode="browse",
+            # "extended" is what gives Ctrl+click (toggle one) and
+            # Shift+click (select a range) for free - "browse" only
+            # ever allows a single row selected at a time.
+            selectmode="extended",
             height=6
         )
 
@@ -224,11 +237,9 @@ class MainFrame(ttk.Frame):
             *self.tree.get_children()
         )
 
-        self.selected_user = None
+        self.selected_users = []
 
-        self.selected_label.config(
-            text="No user selected"
-        )
+        self._update_selected_label()
 
         self.send_button.config(
             state="disabled"
@@ -251,47 +262,44 @@ class MainFrame(ttk.Frame):
         else:
             self.empty_label.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
+    def _update_selected_label(self):
+        count = len(self.selected_users)
+
+        if count == 0:
+            self.selected_label.config(text="No user selected")
+        elif count == 1:
+            self.selected_label.config(text=f"Message {self.selected_users[0]}")
+        elif count <= 3:
+            self.selected_label.config(text=f"Message {', '.join(self.selected_users)}")
+        else:
+            self.selected_label.config(text=f"Message {count} users")
+
     def user_selected(self, event=None):
         selection = self.tree.selection()
 
-        if not selection:
-            self.selected_user = None
+        usernames = []
 
-            self.selected_label.config(
-                text="No user selected"
-            )
+        for item_id in selection:
+            values = self.tree.item(item_id).get("values", [])
 
-            self.send_button.config(
-                state="disabled"
-            )
+            if values:
+                usernames.append(str(values[0]))
 
-            return
+        self.selected_users = usernames
 
-        item = self.tree.item(
-            selection[0]
-        )
-
-        values = item.get("values", [])
-
-        if not values:
-            return
-
-        self.selected_user = str(values[0])
-
-        self.selected_label.config(
-            text=f"Message {self.selected_user}"
-        )
+        self._update_selected_label()
 
         # Sending only makes sense while we actually have a live
-        # connection - don't invite a click that can't do anything.
+        # connection and at least one recipient selected.
         self.send_button.config(
-            state="normal" if self.app.network.connected else "disabled"
+            state="normal" if (usernames and self.app.network.connected) else "disabled"
         )
 
-        self.message.focus_set()
+        if usernames:
+            self.message.focus_set()
 
     def send(self, event=None):
-        if not self.selected_user:
+        if not self.selected_users:
             return "break"
 
         if not self.app.network.connected:
@@ -304,14 +312,32 @@ class MainFrame(ttk.Frame):
             "end-1c"
         )
 
-        # Empty messages are intentionally allowed.
-        sent = self.app.send_notification(
-            self.selected_user,
-            message
-        )
+        # Sent individually to each recipient - the wire protocol is
+        # still a single-target "notify" message, so a multi-select
+        # send is just that message repeated once per selected user.
+        sent_to = []
+        connection_dropped = False
 
-        if not sent:
-            # Connection dropped between the click and the send attempt.
+        for username in self.selected_users:
+
+            if not self.app.network.connected:
+                connection_dropped = True
+                break
+
+            # Empty messages are intentionally allowed.
+            sent = self.app.send_notification(
+                username,
+                message
+            )
+
+            if not sent:
+                connection_dropped = True
+                break
+
+            sent_to.append(username)
+
+        if not sent_to:
+            # Connection dropped before anything went out at all.
             self.app.set_status("Not connected - message not sent")
             self.send_button.config(state="disabled")
             return "break"
@@ -321,9 +347,20 @@ class MainFrame(ttk.Frame):
             "end"
         )
 
-        self.app.set_status(
-            f"Notification sent to {self.selected_user}"
-        )
+        if connection_dropped:
+            self.app.set_status(
+                f"Sent to {len(sent_to)} of {len(self.selected_users)} "
+                f"\u2014 connection dropped"
+            )
+            self.send_button.config(state="disabled")
+        elif len(sent_to) == 1:
+            self.app.set_status(
+                f"Notification sent to {sent_to[0]}"
+            )
+        else:
+            self.app.set_status(
+                f"Notification sent to {len(sent_to)} users"
+            )
 
         return "break"
 

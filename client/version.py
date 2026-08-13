@@ -4,4 +4,4 @@
 #
 # This default is what a plain source checkout / `python -m client.main`
 # reports - i.e. "not an official release build".
-__version__ = "v0.0.3"
+__version__ = "v0.0.4"
