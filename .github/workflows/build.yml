@@ -20,7 +20,7 @@ jobs:
             pip: .venv/bin/pip.exe
             pyi: .venv/bin/pyinstaller.exe
             pyi_name: "win64"
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             shell: bash
             name: "x86_64_linux"
             pip: .venv/bin/pip
