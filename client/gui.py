@@ -220,7 +220,7 @@ class App(tk.Tk):
 
         ttk.Label(
             wrapper,
-            text=f"From {sender}",
+            text=f"From {sender} at {datetime.now().strftime("%X")}",
             style="CardHeading.TLabel"
         ).pack(anchor="w", pady=(0, 10))
 
