@@ -62,18 +62,12 @@ def check_for_update(callback):
             latest_tag = data.get("tag_name", "")
             html_url = data.get("html_url", "")
 
-            current = parse_version(__version__)
-            latest = parse_version(latest_tag)
+            callback(latest_tag, html_url, None)
 
-            if current is not None and latest is not None and latest > current:
-                callback(latest_tag, html_url)
-            else:
-                callback(None, None)
-
-        except Exception:
+        except Exception as e:
             # No internet, GitHub rate-limited us, repo has no releases
             # yet, etc. - fail quietly. This must never surface as an
             # error to someone just trying to connect to a server.
-            callback(None, None)
+            callback(None, None, e)
 
     threading.Thread(target=worker, daemon=True).start()

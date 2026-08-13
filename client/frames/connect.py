@@ -4,7 +4,8 @@ from tkinter import ttk
 
 from client.resources import resource_path
 from client.theme import BG, ACCENT
-from client.updater import check_for_update
+from client.updater import check_for_update, parse_version
+from client.version import __version__
 
 try:
     from PIL import Image, ImageTk
@@ -67,25 +68,34 @@ class ConnectFrame(ttk.Frame):
     # Update check
     # -----------------------------------------------------------------
 
-    def _on_update_check_result(self, latest_tag, html_url):
+    def _on_update_check_result(self, latest_tag, html_url, e):
         # This callback fires from a background thread (see
         # client/updater.py) - never touch Tk widgets directly from
         # there. `after(0, ...)` hands the actual UI update back to the
         # main thread's event loop.
-        self.after(0, lambda: self._show_update_banner(latest_tag, html_url))
+        self.after(0, lambda: self._show_update_banner(latest_tag, html_url, e))
 
-    def _show_update_banner(self, latest_tag, html_url):
-        if latest_tag is None:
-            return  # up to date, or the check failed - nothing to show
+    def _show_update_banner(self, latest_tag, html_url, e):
+        if e is not None:
+            self.update_label.config(
+                    text="Update check failed.",
+                    )
+            return
+
+        if parse_version(__version__) >= parse_version(latest_tag):
+            self.update_label.config(
+                    text="Up to date! 🎉",
+                    )
+            return
 
         self._update_url = html_url
 
         self.update_label.config(
             text=f"\U0001F389 {latest_tag} is available \u2014 click to download",
-            foreground=ACCENT
+            foreground=ACCENT,
+            cursor="hand2"
         )
 
-        self.update_label.pack(pady=(4, 0))
         self.update_label.bind("<Button-1>", self._open_update_url)
 
     def _open_update_url(self, event=None):
@@ -253,10 +263,10 @@ class ConnectFrame(ttk.Frame):
         # _show_update_banner / __init__'s call to check_for_update.
         self.update_label = ttk.Label(
             card,
-            text="",
+            text="Checking for update...",
             style="CardMuted.TLabel",
-            cursor="hand2"
         )
+        self.update_label.pack(pady=(4, 0))
 
         for entry in form.winfo_children():
             if isinstance(entry, ttk.Entry):

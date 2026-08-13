@@ -1,4 +1,4 @@
-name: build and release qt windows and linux frontend
+name: build and release windows and linux client
 on:
   push:
     branches:
