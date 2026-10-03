@@ -3,7 +3,7 @@ import threading
 import queue
 import time
 
-from shared.protocol import send_json, receive_json
+from shared.protocol import send_json, receive_json, make_reader
 
 
 PING_INTERVAL = 5      # seconds between pings
@@ -27,6 +27,10 @@ class NetworkClient:
         self.connector = None
 
         self.last_pong = 0
+
+        # Protocol features (beyond v0.0.1) agreed with the current
+        # server - see shared/protocol.py. Empty for a v0.0.1 server.
+        self.features = set()
 
         self.lock = threading.Lock()
 
@@ -82,8 +86,9 @@ class NetworkClient:
 
         with self.lock:
             self.socket = sock
-            self.file = sock.makefile("r")
+            self.file = make_reader(sock)
             self.connected = True
+            self.features = set()
             self.last_pong = time.monotonic()
             self._voluntary_disconnect = False
 
@@ -213,6 +218,49 @@ class NetworkClient:
                 {
                     "type": "set_username",
                     "username": username
+                }
+            )
+            return True
+
+        except Exception:
+            self.mark_disconnected()
+            return False
+
+    def request_features(self, features):
+        """Ask the server for protocol features it advertised. Only ever
+        call this with features the server listed - a v0.0.1 server
+        lists none, so it never sees a message it doesn't know."""
+
+        if not self.connected or not features:
+            return False
+
+        try:
+            send_json(
+                self.socket,
+                {
+                    "type": "hello",
+                    "features": sorted(features)
+                }
+            )
+
+        except Exception:
+            self.mark_disconnected()
+            return False
+
+        self.features = set(features)
+        return True
+
+    def set_status(self, status):
+
+        if not self.connected:
+            return False
+
+        try:
+            send_json(
+                self.socket,
+                {
+                    "type": "set_status",
+                    "status": status
                 }
             )
             return True

@@ -51,6 +51,16 @@ pip install winotify
 pip install notify2
 ```
 
+On Linux, `notify-send` (part of libnotify, installed on most desktops) is used first; `notify2` is only a fallback.
+
+### Optional: System Tray
+
+```bash
+pip install pystray pillow
+```
+
+With `pystray` installed, OfficeTalk shows a tray icon (Windows/Linux) with **Show**, **Status** and **Quit**, and closing the window keeps it running in the tray.
+
 These packages are optional. If they are not installed, LAN Notify will continue to work and will still display the Tkinter notification dialog.
 
 ## Project Structure
@@ -96,6 +106,17 @@ The server listens on:
 
 This allows clients on the local network to connect to the machine running the server.
 
+Server options:
+
+```text
+-p PORT          TCP port (default 5000)
+-a ADDRESS       address to bind (default 0.0.0.0)
+-n NAME          name shown in clients' server list (default: hostname)
+--no-discovery   don't answer LAN discovery broadcasts
+```
+
+The server also answers discovery broadcasts on **UDP port 5001**, so clients can find it automatically.
+
 ## Running the Client
 
 Open another terminal:
@@ -106,7 +127,7 @@ python -m client.main
 
 The client will open the Tkinter interface.
 
-Enter the server's LAN IP address and port.
+Servers on your network are listed automatically under **Servers on your network** - pick one, or enter the server's LAN IP address and port yourself (click **Scan** to search again).
 
 For example:
 
@@ -119,11 +140,15 @@ Then click **Connect**.
 
 ## Configuration
 
-The client automatically saves connection information and the username in:
+The client automatically saves connection information, the username and settings in a per-user `config.json`:
 
 ```text
-config.json
+Windows: %APPDATA%\LAN Notify\config.json
+Linux:   ~/.config/lan-notify/config.json
+macOS:   ~/Library/Application Support/LAN Notify/config.json
 ```
+
+Message history is saved next to it in `history.json` (last 500 messages).
 
 Example:
 
@@ -165,13 +190,30 @@ Empty messages are also allowed.
 
 Pressing `Ctrl+Enter` while typing a message will also send it.
 
+* **Select all** / **Clear** pick every connected user at once.
+* **Quick message** sends a saved preset (e.g. "Lunch?") to the selected users in one click. Edit the list in **Settings**.
+* The status bar tells you if a recipient was offline and the message wasn't delivered.
+* **Status** (Available / Busy / Away) is shown to everyone in the user list. While **Busy**, incoming messages only show a native notification and go to History - no popup and no window stealing focus.
+* **History** lists sent and received messages. Double-click one to read it again or reply.
+* **Settings** has: start OfficeTalk when you log in, connect and sign in automatically (and keep reconnecting if the server goes away), and keep running in the tray when the window is closed.
+
+Usernames must be unique on the server (case-insensitive).
+
+## Compatibility
+
+Clients and servers of any version work together. Everything added after v0.0.1 is opt-in: the server lists the extra features it supports when a client connects, and a client only asks for (and uses) the ones the server lists.
+
+* **New client, old server:** the original protocol is used. Messaging, replies, history, quick messages, tray and auto-connect all work. Status is local only (Busy still silences popups), usernames aren't checked for duplicates, and there's no offline-delivery warning.
+* **Old client, new server:** the old client gets exactly the original behaviour.
+
 ## Notifications
 
 When a notification is received, the client:
 
-1. Brings the LAN Notify window to the foreground.
+1. Brings the LAN Notify window to the foreground (unless your status is Busy).
 2. Attempts to display a native operating-system notification.
-3. Displays a Tkinter message box.
+3. Displays a message dialog with **Copy** and **Reply** buttons (unless Busy).
+4. Saves the message to History.
 
 Native notifications are optional.
 
@@ -211,7 +253,7 @@ For example:
 
 If clients cannot connect, check the firewall on the computer running the server.
 
-TCP port `5000` must be allowed for connections from the local network.
+TCP port `5000` must be allowed for connections from the local network, and UDP port `5001` for automatic server discovery.
 
 The server itself listens on:
 
@@ -219,14 +261,13 @@ The server itself listens on:
 0.0.0.0:5000
 ```
 
-You can change the port in `server/main.py`:
+You can change the port with `-p`:
 
-```python
-HOST = "0.0.0.0"
-PORT = 5000
+```bash
+python -m server.main -p 6000
 ```
 
-If you change the server port, use the same port when connecting from the clients.
+If you change the server port, use the same port when connecting from the clients (discovered servers report their port automatically).
 
 ## Troubleshooting
 
@@ -301,6 +342,13 @@ Check:
 * Saved connection settings
 * Saved username
 * Client disconnect handling
+* Automatic server discovery on the LAN
+* Reply from the notification dialog
+* Message history
+* System tray icon, start on login, auto-connect/reconnect
+* Select all + quick messages
+* Available / Busy / Away status
+* Unique usernames and delivery feedback
 
 ## License
 

@@ -5,6 +5,7 @@ from tkinter import ttk
 from client.resources import resource_path
 from client.theme import BG, ACCENT
 from client.updater import check_for_update, parse_version
+from client.discovery import discover_servers_async
 from client.version import __version__
 
 try:
@@ -14,7 +15,7 @@ except ImportError:
     _PIL_AVAILABLE = False
 
 
-# Drop a background photo at assets/background.jpg (project root) to use it.
+# Background photo for the connect screen (path relative to project root).
 # Any size/aspect works - it's scaled and center-cropped to always fully
 # cover the window ("cover" fit, like CSS background-size: cover).
 BACKGROUND_PATH = "assets/logo.png"
@@ -64,6 +65,9 @@ class ConnectFrame(ttk.Frame):
         self._update_url = None
         check_for_update(self._on_update_check_result)
 
+        self._servers = []
+        self.scan_servers()
+
     # -----------------------------------------------------------------
     # Update check
     # -----------------------------------------------------------------
@@ -71,9 +75,9 @@ class ConnectFrame(ttk.Frame):
     def _on_update_check_result(self, latest_tag, html_url, e):
         # This callback fires from a background thread (see
         # client/updater.py) - never touch Tk widgets directly from
-        # there. `after(0, ...)` hands the actual UI update back to the
+        # there. call_soon() hands the actual UI update back to the
         # main thread's event loop.
-        self.after(0, lambda: self._show_update_banner(latest_tag, html_url, e))
+        self.app.call_soon(lambda: self._show_update_banner(latest_tag, html_url, e))
 
     def _show_update_banner(self, latest_tag, html_url, e):
         if e is not None:
@@ -82,7 +86,15 @@ class ConnectFrame(ttk.Frame):
                     )
             return
 
-        if parse_version(__version__) >= parse_version(latest_tag):
+        latest = parse_version(latest_tag)
+        current = parse_version(__version__)
+
+        if latest is None:
+            # Not a plain vX.Y.Z tag (pre-release etc.) - can't compare.
+            self.update_label.config(text="")
+            return
+
+        if current is not None and current >= latest:
             self.update_label.config(
                     text="Up to date! 🎉",
                     )
@@ -210,7 +222,7 @@ class ConnectFrame(ttk.Frame):
             panel,
             text="Connect to a notification server on your network",
             style="Muted.TLabel"
-        ).pack(pady=(0, 28))
+        ).pack(pady=(0, 20))
 
         card = ttk.Frame(panel, style="Card.TFrame", padding=24)
         card.pack()
@@ -227,20 +239,48 @@ class ConnectFrame(ttk.Frame):
         ttk.Entry(
             form,
             textvariable=self.host,
-            width=30
-        ).grid(row=1, column=0, pady=(0, 14))
+            width=24
+        ).grid(row=1, column=0, sticky="ew", padx=(0, 8))
 
         ttk.Label(
             form,
             text="Port",
             style="CardMuted.TLabel"
-        ).grid(row=2, column=0, sticky="w", pady=(0, 4))
+        ).grid(row=0, column=1, sticky="w", pady=(0, 4))
 
         ttk.Entry(
             form,
             textvariable=self.port,
-            width=30
-        ).grid(row=3, column=0, pady=(0, 4))
+            width=7
+        ).grid(row=1, column=1, sticky="ew")
+
+        # --- Servers found by LAN discovery ---
+        ttk.Label(
+            form,
+            text="Servers on your network",
+            style="CardMuted.TLabel"
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(14, 4))
+
+        discovered = ttk.Frame(form, style="Card.TFrame")
+        discovered.grid(row=3, column=0, columnspan=2, sticky="ew")
+        discovered.columnconfigure(0, weight=1)
+
+        self.server_choice = tk.StringVar()
+
+        self.server_box = ttk.Combobox(
+            discovered,
+            textvariable=self.server_choice,
+            state="readonly"
+        )
+        self.server_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.server_box.bind("<<ComboboxSelected>>", self._on_server_selected)
+
+        self.scan_button = ttk.Button(
+            discovered,
+            text="Scan",
+            command=self.scan_servers
+        )
+        self.scan_button.grid(row=0, column=1)
 
         self.connect_button = ttk.Button(
             card,
@@ -269,7 +309,7 @@ class ConnectFrame(ttk.Frame):
         self.update_label.pack(pady=(4, 0))
 
         for entry in form.winfo_children():
-            if isinstance(entry, ttk.Entry):
+            if isinstance(entry, ttk.Entry) and not isinstance(entry, ttk.Combobox):
                 entry.bind("<Return>", lambda e: self.connect())
 
         return panel
@@ -297,6 +337,54 @@ class ConnectFrame(ttk.Frame):
             print(f"[ConnectFrame] Could not load logo: {ex}")
             return None
 
+    # -----------------------------------------------------------------
+    # LAN discovery
+    # -----------------------------------------------------------------
+
+    def scan_servers(self):
+        self.scan_button.config(state="disabled")
+        self.server_box.config(values=[])
+        self.server_choice.set("Searching...")
+
+        discover_servers_async(
+            lambda servers: self.app.call_soon(lambda: self._show_servers(servers))
+        )
+
+    def _show_servers(self, servers):
+        self._servers = servers
+        self.scan_button.config(state="normal")
+
+        labels = []
+
+        for server in servers:
+            label = f"{server['name']}  ·  {server['host']}:{server['port']}"
+
+            if isinstance(server.get("users"), int):
+                label += f"  ·  {server['users']} online"
+
+            labels.append(label)
+
+        self.server_box.config(values=labels)
+
+        if not servers:
+            self.server_choice.set("No servers found")
+            return
+
+        self.server_choice.set(f"{len(servers)} found - pick one")
+
+        # Nothing useful saved yet and only one candidate: just fill it in.
+        if len(servers) == 1 and self.host.get().strip() in ("", "127.0.0.1"):
+            self.server_box.current(0)
+            self._on_server_selected()
+
+    def _on_server_selected(self, event=None):
+        index = self.server_box.current()
+
+        if 0 <= index < len(self._servers):
+            server = self._servers[index]
+            self.host.set(server["host"])
+            self.port.set(str(server["port"]))
+
     def set_connecting(self, connecting):
         """Reflect the real connection-attempt state, driven by network
         results rather than a fixed timer guessing when it's safe."""
@@ -309,6 +397,11 @@ class ConnectFrame(ttk.Frame):
             self.hint.config(text="")
 
     def connect(self):
+        # The Enter-key binding on the entries still fires while the
+        # button is disabled - don't start a second connection attempt.
+        if str(self.connect_button.cget("state")) == "disabled":
+            return
+
         host = self.host.get().strip()
         port = self.port.get().strip()
 

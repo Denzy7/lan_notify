@@ -1,4 +1,5 @@
 import platform
+import shutil
 import subprocess
 
 
@@ -56,12 +57,29 @@ class Notifier:
 
     @staticmethod
     def _linux(title, message):
+        # notify-send ships with libnotify on practically every desktop
+        # and, unlike notify2, doesn't depend on dbus-python being
+        # bundled correctly into a frozen binary.
+        if shutil.which("notify-send"):
+            try:
+                subprocess.Popen(
+                    ["notify-send", "--app-name=OfficeTalk", title, message],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                return True
+
+            except Exception as ex:
+                print(
+                    f"[Notifications] notify-send failed: {ex}"
+                )
+
         try:
             import notify2
         except ImportError:
             print(
-                "[Notifications] notify2 is not installed.\n"
-                "Install it with:\n"
+                "[Notifications] Neither notify-send nor notify2 is available.\n"
+                "Install libnotify (notify-send) or:\n"
                 "    pip install notify2"
             )
 
@@ -99,10 +117,12 @@ class Notifier:
         )
 
         try:
-            subprocess.run(
+            # Popen rather than run() so a slow osascript never stalls
+            # the Tk event loop that called us.
+            subprocess.Popen(
                 ["osascript", "-e", script],
-                check=True,
-                capture_output=True
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
             )
 
             return True

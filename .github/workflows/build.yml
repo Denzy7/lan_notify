@@ -51,14 +51,14 @@ jobs:
         run: git config --global core.autocrlf input
 
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: ${{ matrix.name }} venv
         run: |
           python3 -m venv --system-site-packages .venv
-          ${{ matrix.pip}} install pyinstaller pillow
+          ${{ matrix.pip}} install pyinstaller pillow pystray
 
       - name: winotify
         if: matrix.name == 'x86_64_windows'
@@ -69,6 +69,11 @@ jobs:
         if: matrix.name == 'x86_64_linux'
         run: |
           ${{ matrix.pip}} install notify2
+
+      - name: stamp version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo '__version__ = "${{ github.ref_name }}"' > client/version.py
 
       - name: build binary
         run: |

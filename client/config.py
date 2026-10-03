@@ -4,10 +4,24 @@ import sys
 from pathlib import Path
 
 
+DEFAULT_QUICK_MESSAGES = [
+    "On my way",
+    "Meeting in 5 minutes",
+    "Lunch?",
+    "Please call me",
+    "Can you come over?",
+]
+
 DEFAULT_CONFIG = {
     "host": "127.0.0.1",
     "port": 5000,
-    "username": ""
+    "username": "",
+    "quick_messages": DEFAULT_QUICK_MESSAGES,
+    # Only takes effect when a tray icon is available.
+    "close_to_tray": True,
+    # Connect + sign in with the saved details on startup, and keep
+    # retrying if the server is unreachable or the connection drops.
+    "auto_connect": False,
 }
 
 
@@ -37,30 +51,32 @@ def _config_dir() -> Path:
 CONFIG_FILE = _config_dir() / "config.json"
 
 
+def _defaults():
+    config = DEFAULT_CONFIG.copy()
+    config["quick_messages"] = list(DEFAULT_QUICK_MESSAGES)
+    return config
+
+
 def load_config():
     if not CONFIG_FILE.exists():
-        return DEFAULT_CONFIG.copy()
+        return _defaults()
 
     try:
         with CONFIG_FILE.open("r", encoding="utf-8") as file:
             config = json.load(file)
 
-        result = DEFAULT_CONFIG.copy()
-        result.update(config)
+        result = _defaults()
+
+        if isinstance(config, dict):
+            result.update(config)
 
         return result
 
     except (OSError, json.JSONDecodeError):
-        return DEFAULT_CONFIG.copy()
+        return _defaults()
 
 
-def save_config(host, port, username):
-    config = {
-        "host": host,
-        "port": int(port),
-        "username": username
-    }
-
+def save_config(config):
     try:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
 

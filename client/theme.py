@@ -189,6 +189,61 @@ def apply_theme(root: tk.Tk) -> dict:
 
     style.configure("Vertical.TScrollbar", background=BG, troughcolor=BG, bordercolor=BG)
 
+    # Tabs (Send / History)
+    style.configure("TNotebook", background=BG, bordercolor=BORDER, tabmargins=(0, 0, 0, 0))
+    style.configure(
+        "TNotebook.Tab",
+        background=BG,
+        foreground=MUTED,
+        bordercolor=BORDER,
+        lightcolor=BG,
+        padding=(16, 7),
+        font=fonts["body"],
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", CARD)],
+        foreground=[("selected", TEXT)],
+        lightcolor=[("selected", CARD)],
+    )
+
+    # Status picker, settings checkboxes, quick-message menu
+    style.configure(
+        "TCombobox",
+        fieldbackground=CARD,
+        background=CARD,
+        bordercolor=BORDER,
+        lightcolor=BORDER,
+        darkcolor=BORDER,
+        arrowcolor=MUTED,
+        padding=6,
+    )
+    style.map(
+        "TCombobox",
+        fieldbackground=[("readonly", CARD)],
+        selectbackground=[("readonly", CARD)],
+        selectforeground=[("readonly", TEXT)],
+        bordercolor=[("focus", ACCENT)],
+    )
+    root.option_add("*TCombobox*Listbox.background", CARD)
+    root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+
+    style.configure("Card.TCheckbutton", background=CARD, foreground=TEXT, font=fonts["body"])
+    style.map("Card.TCheckbutton", background=[("active", CARD)])
+
+    style.configure(
+        "TMenubutton",
+        background=CARD,
+        foreground=TEXT,
+        bordercolor=BORDER,
+        lightcolor=CARD,
+        darkcolor=CARD,
+        arrowcolor=MUTED,
+        padding=(12, 8),
+        font=fonts["body"],
+    )
+    style.map("TMenubutton", background=[("active", "#f0f1f6")])
+
     return fonts
 
 
@@ -198,9 +253,9 @@ def status_style_for(text: str) -> str:
 
     lowered = text.lower()
 
-    if lowered == "connected":
+    if lowered == "connected" or lowered.startswith("notification sent"):
         return "CardStatusOk.TLabel"
-    if "connecting" in lowered:
+    if "connecting" in lowered or "offline" in lowered:
         return "CardStatusWarn.TLabel"
     if "lost" in lowered or "error" in lowered or "failed" in lowered:
         return "CardStatusBad.TLabel"

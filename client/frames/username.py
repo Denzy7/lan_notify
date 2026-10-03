@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
 
+from shared.protocol import MAX_USERNAME_CHARS, FEATURE_UNIQUE_USERNAMES
+
 
 class UsernameFrame(ttk.Frame):
 
@@ -82,6 +84,10 @@ class UsernameFrame(ttk.Frame):
         self.entry.selection_range(0, tk.END)
 
     def submit(self):
+        # Already waiting on the server (Enter pressed twice).
+        if str(self.submit_button.cget("state")) == "disabled":
+            return
+
         # The connection can drop while this screen is showing (e.g. the
         # server closed, or the heartbeat timed out). Sending a stale
         # username request would silently fail, so bail out clearly
@@ -96,25 +102,49 @@ class UsernameFrame(ttk.Frame):
             self.hint.config(text="Username cannot be empty.")
             return
 
-        if len(username) > 32:
+        if len(username) > MAX_USERNAME_CHARS:
             self.hint.config(text="Username is too long.")
             return
 
-        self.submit_button.config(
-            state="disabled"
-        )
-
         sent = self.app.set_username(
             username
-        )
-
-        self.submit_button.config(
-            state="normal"
         )
 
         if not sent:
             self.hint.config(text="Not connected to the server.")
             return
 
+        if FEATURE_UNIQUE_USERNAMES not in self.app.network.features:
+            # Older server: it never replies, it just takes the name.
+            self.app.handle_event(
+                {
+                    "type": "username_result",
+                    "success": True,
+                    "username": username
+                }
+            )
+            return
+
+        # The server has the final say (e.g. the name may be taken) -
+        # wait for its username_result before moving on.
+        self.submit_button.config(
+            state="disabled"
+        )
+        self.hint.config(text="Signing in...")
+
+    def on_result(self, event):
+        self.submit_button.config(
+            state="normal"
+        )
+
+        if event.get("success"):
+            self.hint.config(text="")
+        else:
+            self.hint.config(text=event.get("error") or "Username was rejected.")
+            self.after(100, self.focus_username)
+
+    def on_disconnected(self):
+        self.submit_button.config(
+            state="normal"
+        )
         self.hint.config(text="")
-        self.app.username_accepted()
